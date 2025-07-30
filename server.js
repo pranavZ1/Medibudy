@@ -20,7 +20,12 @@ app.use(helmet());
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3001'
+    'http://localhost:3001',
+    'https://cozy-longma-80a250.netlify.app',
+    'https://medibudy.netlify.app',
+    'https://medibudy-app.netlify.app',
+    /https:\/\/.*\.netlify\.app$/,
+    /https:\/\/.*\.vercel\.app$/
   ],
   credentials: true
 }));
