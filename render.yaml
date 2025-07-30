@@ -1,0 +1,14 @@
+version: 1
+services:
+  - type: web
+    name: medibudy-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
+    autoDeploy: true
