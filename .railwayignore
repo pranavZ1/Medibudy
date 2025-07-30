@@ -1,0 +1,20 @@
+# Ignore frontend directory for Railway backend deployment
+frontend/
+frontend/**
+
+# Ignore development files
+.env.local
+.env.development
+*.log
+.DS_Store
+
+# Ignore documentation
+README.md
+DEPLOYMENT.md
+
+# Ignore scraper files
+scrapers/
+
+# Ignore build artifacts
+node_modules/
+.npm

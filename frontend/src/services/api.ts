@@ -7,9 +7,9 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_URL;
   }
   
-  // In production (on Netlify), use deployed backend URL
+  // In production (on Netlify), use Railway backend
   if (process.env.NODE_ENV === 'production') {
-    return 'https://medibudy-backend.onrender.com/api';
+    return 'https://medibudy-backend-production.up.railway.app/api';
   }
   
   // For local development
