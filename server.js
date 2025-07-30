@@ -65,6 +65,9 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime() 
   });
 });
+app.get('/', (req, res) => {
+  res.send('Welcome to the MediBudy API!');
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
