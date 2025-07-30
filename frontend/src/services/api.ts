@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   
   // In production (on Netlify), use Railway backend
   if (process.env.NODE_ENV === 'production') {
-    return 'https://medibudy-backend-production.up.railway.app/api';
+    return 'https://web-production-4fc87.up.railway.app/api';
   }
   
   // For local development
