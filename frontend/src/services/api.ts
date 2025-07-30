@@ -1,6 +1,27 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+// Determine API base URL based on environment
+const getApiBaseUrl = () => {
+  // If explicitly set via environment variable, use that
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // In production (on Netlify), try to detect backend URL
+  if (process.env.NODE_ENV === 'production') {
+    // Option 1: Use a deployed backend (replace with your actual URL)
+    // return 'https://your-backend-app.onrender.com/api';
+    
+    // Option 2: For testing, use a mock response
+    // For now, return localhost as fallback (this won't work but won't crash)
+    return 'http://localhost:5001/api';
+  }
+  
+  // For local development
+  return 'http://localhost:5001/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
