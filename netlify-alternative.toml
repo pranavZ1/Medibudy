@@ -1,6 +1,7 @@
+# Alternative configuration if you don't want to use base directory
 [build]
   publish = "frontend/build"
-  command = "cd frontend && npm install && npm run build"
+  command = "cd frontend && npm run build"
 
 [build.environment]
   NODE_VERSION = "18"
