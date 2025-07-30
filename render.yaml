@@ -9,6 +9,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        generateValue: true
+      - key: MONGODB_URI
+        value: mongodb+srv://meher892g:58Ea5KZQ8dy5Rzl8@cluster0.btsqlff.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - key: GEMINI_API_KEY
+        value: AIzaSyA9wpa4VWYPtpQ4iIsuin_6z1fFYcNvOQQ
+      - key: JWT_SECRET
+        value: your_jwt_secret_key_here_change_in_production_2024_secure
+      - key: FRONTEND_URL
+        value: https://cozy-longma-80a250.netlify.app
     autoDeploy: true

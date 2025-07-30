@@ -7,14 +7,9 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_URL;
   }
   
-  // In production (on Netlify), try to detect backend URL
+  // In production (on Netlify), use deployed backend URL
   if (process.env.NODE_ENV === 'production') {
-    // Option 1: Use a deployed backend (replace with your actual URL)
-    // return 'https://your-backend-app.onrender.com/api';
-    
-    // Option 2: For testing, use a mock response
-    // For now, return localhost as fallback (this won't work but won't crash)
-    return 'http://localhost:5001/api';
+    return 'https://medibudy-backend.onrender.com/api';
   }
   
   // For local development
