@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { treatmentsAPI } from '../services/api';
 import { Search, Filter, MapPin, DollarSign, Clock, Star } from 'lucide-react';
 
@@ -30,15 +30,6 @@ const TreatmentSearch: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  useEffect(() => {
-    fetchCategories();
-    fetchTreatments();
-  }, []);
-
-  useEffect(() => {
-    fetchTreatments();
-  }, [searchQuery, selectedCategory, priceRange, currentPage]);
-
   const fetchCategories = async () => {
     try {
       const response = await treatmentsAPI.getCategories();
@@ -48,7 +39,7 @@ const TreatmentSearch: React.FC = () => {
     }
   };
 
-  const fetchTreatments = async () => {
+  const fetchTreatments = useCallback(async () => {
     setLoading(true);
     try {
       const params: any = {
@@ -73,7 +64,16 @@ const TreatmentSearch: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, selectedCategory, priceRange, currentPage]);
+
+  useEffect(() => {
+    fetchCategories();
+    fetchTreatments();
+  }, [fetchTreatments]);
+
+  useEffect(() => {
+    fetchTreatments();
+  }, [fetchTreatments]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

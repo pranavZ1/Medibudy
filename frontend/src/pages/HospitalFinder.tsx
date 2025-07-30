@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { hospitalsAPI } from '../services/api';
 import { MapPin, Star, Phone, Clock, Shield, Navigation } from 'lucide-react';
 
@@ -53,11 +53,19 @@ const HospitalFinder: React.FC = () => {
     'Psychiatry', 'Emergency Medicine', 'General Surgery', 'Internal Medicine'
   ];
 
-  useEffect(() => {
-    getCurrentLocation();
-  }, []);
+  const fetchNearbyHospitals = useCallback(async (coordinates: [number, number]) => {
+    setLoading(true);
+    try {
+      const response = await hospitalsAPI.getNearby(coordinates, searchRadius);
+      setHospitals(response.data.hospitals);
+    } catch (error) {
+      console.error('Failed to fetch nearby hospitals:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchRadius]);
 
-  const getCurrentLocation = () => {
+  const getCurrentLocation = useCallback(() => {
     if (navigator.geolocation) {
       setLoading(true);
       navigator.geolocation.getCurrentPosition(
@@ -78,19 +86,11 @@ const HospitalFinder: React.FC = () => {
     } else {
       setLocationError('Geolocation is not supported by this browser.');
     }
-  };
+  }, [fetchNearbyHospitals]);
 
-  const fetchNearbyHospitals = async (coordinates: [number, number]) => {
-    setLoading(true);
-    try {
-      const response = await hospitalsAPI.getNearby(coordinates, searchRadius);
-      setHospitals(response.data.hospitals);
-    } catch (error) {
-      console.error('Failed to fetch nearby hospitals:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    getCurrentLocation();
+  }, [getCurrentLocation]);
 
   const searchHospitals = async () => {
     setLoading(true);
