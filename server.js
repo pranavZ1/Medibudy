@@ -17,18 +17,37 @@ const rateLimiter = new RateLimiterMemory({
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3001',
-    'https://cozy-longma-80a250.netlify.app',
-    'https://medibudy.netlify.app',
-    'https://medibudy-app.netlify.app',
-    /https:\/\/.*\.netlify\.app$/,
-    /https:\/\/.*\.vercel\.app$/
-  ],
-  credentials: true
-}));
+
+// More permissive CORS for production
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3001',
+      'https://cozy-longma-80a250.netlify.app'
+    ];
+    
+    // Check if origin is in allowed list or matches netlify pattern
+    const isAllowed = allowedOrigins.includes(origin) || 
+                     origin.match(/https:\/\/.*\.netlify\.app$/) ||
+                     origin.match(/https:\/\/.*\.vercel\.app$/);
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(null, true); // Allow all for now, log for debugging
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept']
+};
+
+app.use(cors(corsOptions));
 
 // Rate limiting middleware
 app.use(async (req, res, next) => {

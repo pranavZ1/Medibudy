@@ -299,14 +299,17 @@ router.get('/consultation/:id', verifyToken, async (req, res) => {
 // Simple symptom analysis (no auth required) - Enhanced Medical AI
 router.post('/analyze-symptoms-simple', async (req, res) => {
   try {
+    console.log('=== SYMPTOM ANALYSIS REQUEST ===');
     console.log('Request received:', req.method, req.url);
-    console.log('Request headers:', req.headers);
-    console.log('Request body:', req.body);
+    console.log('Request origin:', req.get('Origin'));
+    console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
     console.log('Request body type:', typeof req.body);
     
     const { symptoms, additionalInfo } = req.body;
 
     if (!symptoms || !Array.isArray(symptoms) || symptoms.length === 0) {
+      console.log('Invalid symptoms provided:', symptoms);
       return res.status(400).json({ error: 'Please provide at least one symptom' });
     }
 
@@ -315,14 +318,17 @@ router.post('/analyze-symptoms-simple', async (req, res) => {
     // Use Medical AI Doctor for comprehensive analysis
     const analysis = await medicalDoctor.analyzeSymptoms(symptoms, { additionalInfo });
 
+    console.log('Analysis completed successfully');
     res.json({
       message: 'Medical analysis completed successfully',
       analysis: analysis
     });
   } catch (error) {
     console.error('Medical AI analysis error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       error: 'Failed to analyze symptoms',
+      details: error.message,
       analysis: medicalDoctor.getComprehensiveDefaultAnalysis()
     });
   }
