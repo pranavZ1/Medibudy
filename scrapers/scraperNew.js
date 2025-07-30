@@ -77,7 +77,7 @@ class VaidamScraper {
     this.page = null;
   }
 
-  // Helper function to wait - replaces waitForTimeout
+  // Helper function to wait
   async delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -125,192 +125,87 @@ class VaidamScraper {
         const url = `${this.baseUrl}/hospitals/india?page=${pageNum}`;
         console.log(`Scraping page ${pageNum}: ${url}`);
         
-        await this.page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-        await this.delay(5000); // Increased delay for page load
-
-        // Check if there are any "Show More" buttons and click them
-        await this.page.evaluate(() => {
-          const showMoreButtons = document.querySelectorAll('button, a');
-          showMoreButtons.forEach(button => {
-            if (button.textContent.toLowerCase().includes('show more') || 
-                button.textContent.toLowerCase().includes('load more')) {
-              button.click();
-            }
-          });
-        });
-
-        await this.delay(3000);
+        await this.page.goto(url, { waitUntil: 'networkidle2' });
+        await this.delay(2000);
 
         const hospitals = await this.page.evaluate(() => {
           const results = [];
           
-          // Based on the screenshot, hospitals are in card-like structures
-          // Try multiple selectors that might contain hospital information
-          const containerSelectors = [
-            'div[class*="hospital"]',
-            'div[class*="card"]', 
-            'div[class*="listing"]',
-            'div[class*="item"]',
+          // Multiple selectors to find hospital cards
+          const hospitalSelectors = [
             '.hospital-card',
-            '.listing',
-            '.card'
+            '.hospital-listing',
+            '.listing-card',
+            '[class*="hospital"]',
+            '.card',
+            '.result-item'
           ];
           
           let hospitalElements = [];
-          
-          // Try each selector
-          for (const selector of containerSelectors) {
+          for (const selector of hospitalSelectors) {
             const elements = document.querySelectorAll(selector);
             if (elements.length > 0) {
               hospitalElements = Array.from(elements);
-              console.log(`Using selector: ${selector}, found ${elements.length} elements`);
               break;
             }
           }
 
-          // If no specific selectors work, look for elements containing hospital names
-          if (hospitalElements.length === 0) {
-            console.log('No specific selectors worked, trying text-based search');
-            const allElements = document.querySelectorAll('div, article, section');
-            hospitalElements = Array.from(allElements).filter(el => {
-              const text = el.textContent || '';
-              const hasHospitalKeyword = /hospital|medical center|clinic|healthcare|institute/i.test(text);
-              const hasEstablished = /established|founded/i.test(text);
-              const hasLocation = /india|delhi|mumbai|bangalore|chennai|kolkata|hyderabad|pune|gurgaon/i.test(text);
-              const hasRating = /rating|star|\d+\.\d+/i.test(text);
-              
-              return hasHospitalKeyword && (hasEstablished || hasLocation || hasRating) && 
-                     text.length > 50 && text.length < 2000;
-            });
-            console.log(`Found ${hospitalElements.length} elements using text-based search`);
-          }
-
-          hospitalElements.forEach((element, index) => {
+          hospitalElements.forEach(card => {
             try {
-              let hospitalData = {};
-
-              // Extract hospital name using multiple strategies
+              // Extract name
+              const nameSelectors = ['h1', 'h2', 'h3', 'h4', '.name', '.title', '.hospital-name'];
               let name = '';
-              
-              // Strategy 1: Look for headings
-              const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
-              for (const heading of headings) {
-                const text = heading.textContent.trim();
-                if (text && /hospital|medical|clinic|healthcare|institute/i.test(text) && text.length < 200) {
-                  name = text;
+              for (const selector of nameSelectors) {
+                const nameEl = card.querySelector(selector);
+                if (nameEl && nameEl.textContent.trim()) {
+                  name = nameEl.textContent.trim();
                   break;
                 }
               }
-              
-              // Strategy 2: Look for strong/bold text
-              if (!name) {
-                const strongElements = element.querySelectorAll('strong, b, .title, .name');
-                for (const strong of strongElements) {
-                  const text = strong.textContent.trim();
-                  if (text && /hospital|medical|clinic|healthcare|institute/i.test(text) && text.length < 200) {
-                    name = text;
-                    break;
-                  }
-                }
-              }
-              
-              // Strategy 3: Extract from full text using regex
-              if (!name) {
-                const fullText = element.textContent;
-                const hospitalMatch = fullText.match(/([A-Z][a-zA-Z\s&,.-]{5,100}(?:Hospital|Medical Center|Medical College|Institute|Clinic|Healthcare))/);
-                if (hospitalMatch) {
-                  name = hospitalMatch[1].trim();
-                }
-              }
-
-              if (!name || name.length < 3) return;
-
-              hospitalData.name = name;
 
               // Extract location
+              const locationSelectors = ['.location', '.city', '.address', '[class*="location"]'];
               let location = '';
-              const locationKeywords = ['location:', 'address:', 'city:', 'india,'];
-              const fullText = element.textContent.toLowerCase();
-              
-              // Look for location patterns
-              const locationMatch = fullText.match(/(location|address):\s*([^,\n]+(?:,\s*[^,\n]+)*)/i);
-              if (locationMatch) {
-                location = locationMatch[2].trim();
-              } else {
-                // Look for Indian city names
-                const cities = ['new delhi', 'mumbai', 'bangalore', 'chennai', 'kolkata', 'hyderabad', 'pune', 'gurgaon', 'noida', 'delhi'];
-                for (const city of cities) {
-                  if (fullText.includes(city)) {
-                    location = city;
-                    break;
-                  }
+              for (const selector of locationSelectors) {
+                const locEl = card.querySelector(selector);
+                if (locEl && locEl.textContent.trim()) {
+                  location = locEl.textContent.trim();
+                  break;
                 }
               }
-              
-              hospitalData.location = location || 'India';
 
               // Extract rating
+              const ratingEl = card.querySelector('[class*="rating"], [class*="star"], .score');
               let rating = 0;
-              const ratingMatch = element.textContent.match(/(\d+\.?\d*)\s*(?:\(\d+\s*ratings?\)|\s*rating|\/5|stars?)/i);
-              if (ratingMatch) {
-                rating = parseFloat(ratingMatch[1]);
-              }
-              hospitalData.rating = rating;
-
-              // Extract establishment year
-              const establishedMatch = element.textContent.match(/established.{0,20}(\d{4})|founded.{0,20}(\d{4})/i);
-              if (establishedMatch) {
-                hospitalData.established = establishedMatch[1] || establishedMatch[2];
-              }
-
-              // Extract bed count
-              const bedMatch = element.textContent.match(/(\d+)\s*beds?/i);
-              if (bedMatch) {
-                hospitalData.beds = parseInt(bedMatch[1]);
+              if (ratingEl) {
+                const match = ratingEl.textContent.match(/(\d+\.?\d*)/);
+                rating = match ? parseFloat(match[1]) : 0;
               }
 
               // Extract specialties
-              const specialtyKeywords = ['cardiology', 'oncology', 'orthopedics', 'neurology', 'gastroenterology', 
-                                       'urology', 'dermatology', 'gynecology', 'pediatrics', 'surgery'];
-              const specialties = [];
-              const text = element.textContent.toLowerCase();
-              specialtyKeywords.forEach(specialty => {
-                if (text.includes(specialty)) {
-                  specialties.push(specialty);
-                }
-              });
-              hospitalData.specialties = specialties;
+              const specialtyElements = card.querySelectorAll('[class*="specialty"], [class*="department"], .service');
+              const specialties = Array.from(specialtyElements).map(el => el.textContent.trim()).filter(text => text.length > 0);
 
               // Extract link
-              const linkElement = element.querySelector('a') || element.closest('a');
-              let link = '';
-              if (linkElement && linkElement.href) {
-                link = linkElement.href;
-                if (link.startsWith('/')) {
-                  link = 'https://www.vaidam.com' + link;
-                }
-              }
-              hospitalData.link = link;
+              const linkEl = card.querySelector('a') || card.closest('a');
+              const link = linkEl ? linkEl.href : '';
 
               // Extract description
-              const paragraphs = element.querySelectorAll('p');
-              let description = '';
-              for (const p of paragraphs) {
-                const text = p.textContent.trim();
-                if (text.length > 50 && text.length < 500) {
-                  description = text;
-                  break;
-                }
-              }
-              hospitalData.description = description;
+              const descEl = card.querySelector('p, .description, .details');
+              const description = descEl ? descEl.textContent.trim() : '';
 
-              // Only add if we have a valid name
-              if (hospitalData.name && hospitalData.name.length > 5) {
-                results.push(hospitalData);
+              if (name && name.length > 2) {
+                results.push({
+                  name,
+                  location,
+                  rating,
+                  specialties,
+                  description,
+                  link
+                });
               }
-
             } catch (err) {
-              console.log('Error processing hospital element:', err.message);
+              console.log('Error processing hospital card:', err.message);
             }
           });
 
@@ -327,15 +222,11 @@ class VaidamScraper {
         }
 
         // Random delay to avoid being blocked
-        await this.delay(Math.random() * 3000 + 2000);
+        await this.delay(Math.random() * 2000 + 1000);
 
       } catch (error) {
         console.error(`Error scraping page ${pageNum}:`, error.message);
-        // Try to continue with next page instead of stopping
-        pageNum++;
-        if (pageNum > 5) { // Stop after too many consecutive errors
-          hasMore = false;
-        }
+        hasMore = false;
       }
     }
 
@@ -357,204 +248,135 @@ class VaidamScraper {
         return;
       }
 
-      // Create a new page for each hospital to avoid detached frame errors
-      const doctorPage = await this.browser.newPage();
-      await doctorPage.setViewport({ width: 1366, height: 768 });
-      await doctorPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      await this.page.goto(hospitalUrl, { waitUntil: 'networkidle2' });
+      await this.delay(2000);
 
-      try {
-        await doctorPage.goto(hospitalUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-        await this.delay(4000);
-
-        // Try to find and click doctors tab or section
-        const doctorsTabFound = await doctorPage.evaluate(() => {
-          const clickableElements = Array.from(document.querySelectorAll('a, button, div, span'));
-          const doctorElements = clickableElements.filter(el => 
-            /doctor|physician|specialist|staff|team|faculty/i.test(el.textContent)
-          );
-          
-          for (const element of doctorElements) {
-            if (element.click && typeof element.click === 'function') {
-              try {
-                element.click();
-                return true;
-              } catch (e) {
-                continue;
-              }
-            }
-          }
-          return false;
-        });
-
-        if (doctorsTabFound) {
-          await this.delay(4000);
+      // Try to find a doctors tab or section
+      const doctorsTabFound = await this.page.evaluate(() => {
+        const tabs = Array.from(document.querySelectorAll('a, button, div'));
+        const doctorTab = tabs.find(tab => 
+          /doctor|physician|specialist|staff/i.test(tab.textContent)
+        );
+        if (doctorTab && doctorTab.click) {
+          doctorTab.click();
+          return true;
         }
+        return false;
+      });
 
-        // Look for doctor information on the page
-        const doctors = await doctorPage.evaluate(() => {
+      if (doctorsTabFound) {
+        await this.delay(2000);
+      }
+
+      // Scrape doctors from current page
+      let pageNum = 1;
+      let hasMoreDoctors = true;
+
+      while (hasMoreDoctors && pageNum <= 10) { // Limit to 10 pages per hospital
+        const doctors = await this.page.evaluate(() => {
           const results = [];
           
-          // Multiple strategies to find doctor information
+          // Multiple selectors for doctor cards
           const doctorSelectors = [
+            '.doctor-card',
+            '.physician-card',
+            '.doctor-listing',
             '[class*="doctor"]',
-            '[class*="physician"]', 
-            '[class*="staff"]',
-            '[class*="team"]',
-            '[class*="faculty"]',
-            '.profile',
-            '.member',
-            '.specialist'
+            '[class*="physician"]',
+            '.staff-card'
           ];
 
           let doctorElements = [];
-          
-          // Try specific selectors first
           for (const selector of doctorSelectors) {
             const elements = document.querySelectorAll(selector);
             if (elements.length > 0) {
               doctorElements = Array.from(elements);
-              console.log(`Found doctors using selector: ${selector}, count: ${elements.length}`);
               break;
             }
           }
 
-          // If no specific selectors work, look for patterns in text
-          if (doctorElements.length === 0) {
-            const allElements = document.querySelectorAll('div, section, article');
-            doctorElements = Array.from(allElements).filter(el => {
-              const text = el.textContent || '';
-              const hasDoctorTitle = /dr\.|doctor|physician|specialist/i.test(text);
-              const hasSpecialty = /cardiology|oncology|orthopedic|neurology|surgery|medicine|gynecology|pediatric|dermatology|urology|gastroenterology/i.test(text);
-              const hasExperience = /years?.*experience|experience.*years?|\d+\+?\s*years?/i.test(text);
-              
-              return hasDoctorTitle && (hasSpecialty || hasExperience) && 
-                     text.length > 20 && text.length < 1000;
-            });
-            console.log(`Found ${doctorElements.length} potential doctor elements using text patterns`);
-          }
-
-          doctorElements.forEach((element, index) => {
+          doctorElements.forEach(card => {
             try {
-              let doctorData = {};
-
-              // Extract doctor name
+              // Extract name
+              const nameSelectors = ['h3', 'h4', 'h5', '.name', '.doctor-name', '.physician-name'];
               let name = '';
-              
-              // Strategy 1: Look for headings with Dr. title
-              const headings = element.querySelectorAll('h1, h2, h3, h4, h5, h6');
-              for (const heading of headings) {
-                const text = heading.textContent.trim();
-                if (/dr\.|doctor/i.test(text) && text.length < 100) {
-                  name = text;
+              for (const selector of nameSelectors) {
+                const nameEl = card.querySelector(selector);
+                if (nameEl && nameEl.textContent.trim()) {
+                  name = nameEl.textContent.trim();
                   break;
                 }
               }
-              
-              // Strategy 2: Look for strong/bold text with Dr. title
-              if (!name) {
-                const strongElements = element.querySelectorAll('strong, b, .name, .title');
-                for (const strong of strongElements) {
-                  const text = strong.textContent.trim();
-                  if (/dr\.|doctor/i.test(text) && text.length < 100) {
-                    name = text;
-                    break;
-                  }
-                }
-              }
-              
-              // Strategy 3: Extract from text using regex
-              if (!name) {
-                const text = element.textContent;
-                const nameMatch = text.match(/(Dr\.?\s+[A-Z][a-zA-Z\s.]{2,50})/i);
-                if (nameMatch) {
-                  name = nameMatch[1].trim();
-                }
-              }
-
-              if (!name || name.length < 3) return;
-              
-              doctorData.name = name;
 
               // Extract specialization
+              const specSelectors = ['.specialty', '.specialization', '.department', '.field'];
               let specialization = '';
-              const text = element.textContent.toLowerCase();
-              
-              const specialties = [
-                'cardiologist', 'oncologist', 'orthopedic', 'neurologist', 'surgeon',
-                'gynecologist', 'pediatrician', 'dermatologist', 'urologist', 
-                'gastroenterologist', 'psychiatrist', 'radiologist', 'anesthesiologist',
-                'cardiology', 'oncology', 'orthopedics', 'neurology', 'surgery',
-                'gynecology', 'pediatrics', 'dermatology', 'urology', 'gastroenterology',
-                'internal medicine', 'family medicine', 'emergency medicine'
-              ];
-              
-              for (const specialty of specialties) {
-                if (text.includes(specialty)) {
-                  specialization = specialty;
+              for (const selector of specSelectors) {
+                const specEl = card.querySelector(selector);
+                if (specEl && specEl.textContent.trim()) {
+                  specialization = specEl.textContent.trim();
                   break;
                 }
               }
-              
-              // Look for specialty in structured format
-              if (!specialization) {
-                const specMatch = text.match(/speciality?:?\s*([a-z\s&]+)/i);
-                if (specMatch) {
-                  specialization = specMatch[1].trim();
-                }
-              }
-              
-              doctorData.specialization = specialization || 'General Medicine';
 
               // Extract experience
-              let experience = '';
-              const expMatch = element.textContent.match(/(\d+)\+?\s*years?\s*(?:of\s*)?experience/i);
-              if (expMatch) {
-                experience = `${expMatch[1]} years`;
-              }
-              doctorData.experience = experience;
+              const expEl = card.querySelector('.experience, [class*="exp"], .years');
+              const experience = expEl ? expEl.textContent.trim() : '';
 
               // Extract qualifications
-              let qualifications = '';
-              const qualMatch = element.textContent.match(/(MBBS|MD|MS|MCh|DM|FRCS|MRCP|PhD|Fellowship)[^.]*\./gi);
-              if (qualMatch) {
-                qualifications = qualMatch.join(', ');
-              }
-              doctorData.qualifications = qualifications;
+              const qualEl = card.querySelector('.qualification, .qualifications, .degree');
+              const qualifications = qualEl ? qualEl.textContent.trim() : '';
 
               // Extract profile link
-              const linkElement = element.querySelector('a') || element.closest('a');
-              let profileLink = '';
-              if (linkElement && linkElement.href) {
-                profileLink = linkElement.href;
-                if (profileLink.startsWith('/')) {
-                  profileLink = 'https://www.vaidam.com' + profileLink;
-                }
+              const linkEl = card.querySelector('a') || card.closest('a');
+              const profileLink = linkEl ? linkEl.href : '';
+
+              if (name && name.length > 2) {
+                results.push({
+                  name,
+                  specialization,
+                  experience,
+                  qualifications,
+                  profileLink
+                });
               }
-              doctorData.profileLink = profileLink;
-
-              results.push(doctorData);
-
             } catch (err) {
-              console.log('Error processing doctor element:', err.message);
+              console.log('Error processing doctor card:', err.message);
             }
           });
 
           return results;
         });
 
-        console.log(`Found ${doctors.length} doctors for ${hospitalName}`);
+        if (doctors.length === 0) {
+          hasMoreDoctors = false;
+        } else {
+          // Save doctors to database
+          for (const doctor of doctors) {
+            await this.saveDoctorToDB({
+              ...doctor,
+              hospital: hospitalName,
+              location: hospitalLocation
+            });
+          }
 
-        // Save doctors to database
-        for (const doctor of doctors) {
-          await this.saveDoctorToDB({
-            ...doctor,
-            hospital: hospitalName,
-            location: hospitalLocation
+          // Try to navigate to next page
+          const nextPageFound = await this.page.evaluate(() => {
+            const nextButton = document.querySelector('.next, [class*="next"], .pagination a[href*="page"]');
+            if (nextButton && nextButton.click) {
+              nextButton.click();
+              return true;
+            }
+            return false;
           });
-        }
 
-      } finally {
-        await doctorPage.close();
+          if (!nextPageFound) {
+            hasMoreDoctors = false;
+          } else {
+            await this.delay(2000);
+            pageNum++;
+          }
+        }
       }
 
     } catch (error) {
@@ -591,13 +413,10 @@ class VaidamScraper {
       if (!existingHospital) {
         const hospital = new Hospital({
           ...hospitalData,
-          country: 'India',
           lastUpdated: new Date()
         });
         await hospital.save();
         console.log(`Saved hospital: ${hospitalData.name}`);
-      } else {
-        console.log(`Hospital already exists: ${hospitalData.name}`);
       }
     } catch (error) {
       console.error('Error saving hospital:', error.message);
@@ -741,6 +560,35 @@ class VaidamScraper {
     }
   }
 
+  async scrapeTreatmentDetails(treatmentUrl) {
+    try {
+      await this.page.goto(treatmentUrl, { waitUntil: 'networkidle2' });
+      
+      const details = await this.page.evaluate(() => {
+        const titleElement = document.querySelector('h1, .treatment-title, .procedure-title');
+        const descElement = document.querySelector('.treatment-description, .overview, .about');
+        const durationElement = document.querySelector('.duration, .treatment-duration');
+        const recoveryElement = document.querySelector('.recovery, .recovery-time');
+        const procedureElements = document.querySelectorAll('.procedure-step, .treatment-step');
+
+        const procedureSteps = Array.from(procedureElements).map(step => step.textContent.trim());
+
+        return {
+          title: titleElement ? titleElement.textContent.trim() : '',
+          fullDescription: descElement ? descElement.textContent.trim() : '',
+          duration: durationElement ? durationElement.textContent.trim() : '',
+          recovery: recoveryElement ? recoveryElement.textContent.trim() : '',
+          procedureSteps: procedureSteps
+        };
+      });
+
+      return details;
+    } catch (error) {
+      console.error('Error scraping treatment details:', error);
+      return null;
+    }
+  }
+
   async saveTreatmentToDB(treatmentData, category) {
     try {
       const existingTreatment = await Treatment.findOne({ 
@@ -752,7 +600,6 @@ class VaidamScraper {
         const treatment = new Treatment({
           ...treatmentData,
           category: category,
-          country: 'India',
           lastUpdated: new Date()
         });
         await treatment.save();
