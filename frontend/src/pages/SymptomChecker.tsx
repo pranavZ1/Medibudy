@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { aiAPI } from '../services/api';
+import { aiAPI, locationAPI } from '../services/api';
+import { useLocation } from '../contexts/LocationContext';
+import LocationSelector from '../components/LocationSelector';
 import { 
   Search, 
   Plus, 
@@ -8,7 +10,12 @@ import {
   CheckCircle, 
   Brain,
   Stethoscope,
-  FileText
+  FileText,
+  MapPin,
+  Hospital,
+  User,
+  Star,
+  Navigation2
 } from 'lucide-react';
 
 interface AnalysisResult {
@@ -22,13 +29,63 @@ interface AnalysisResult {
   disclaimer: string;
 }
 
+interface Hospital {
+  _id: string;
+  name: string;
+  location: {
+    address: string;
+    city: string;
+    state: string;
+    coordinates: {
+      lat: number;
+      lng: number;
+    };
+  };
+  specialties: Array<{
+    name: string;
+    description: string;
+  }>;
+  ratings: {
+    overall: number;
+  };
+  distance?: number;
+}
+
+interface Doctor {
+  _id: string;
+  name: string;
+  specialization: string;
+  experience_years: number;
+  rating: {
+    value: number;
+    total_reviews: number;
+  };
+  location: {
+    city: string;
+    state: string;
+  };
+  hospital: {
+    name: string;
+  };
+  distance?: number;
+}
+
 const SymptomChecker: React.FC = () => {
+  const { userLocation, isLoadingLocation } = useLocation();
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [currentSymptom, setCurrentSymptom] = useState('');
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState('');
+  
+  // Location and healthcare provider states
+  const [showLocationSelector, setShowLocationSelector] = useState(false);
+  const [nearbyHospitals, setNearbyHospitals] = useState<Hospital[]>([]);
+  const [nearbyDoctors, setNearbyDoctors] = useState<Doctor[]>([]);
+  const [loadingHealthcare, setLoadingHealthcare] = useState(false);
+  const [healthcareError, setHealthcareError] = useState('');
+  const [showNearbyProviders, setShowNearbyProviders] = useState(false);
 
   const commonSymptoms = [
     'Headache', 'Fever', 'Cough', 'Fatigue', 'Nausea', 'Dizziness',
@@ -47,6 +104,37 @@ const SymptomChecker: React.FC = () => {
     setSymptoms(symptoms.filter((_, i) => i !== index));
   };
 
+  const fetchNearbyHealthcare = async () => {
+    if (!userLocation) {
+      setHealthcareError('Location not available. Please enable location services or select manually.');
+      return;
+    }
+
+    setLoadingHealthcare(true);
+    setHealthcareError('');
+
+    try {
+      const response = await locationAPI.getNearbyHealthcare(
+        userLocation.lat,
+        userLocation.lng,
+        50, // radius in km
+        undefined, // specialty
+        undefined, // specialization
+        5, // hospital limit
+        10 // doctor limit
+      );
+
+      setNearbyHospitals(response.data.hospitals || []);
+      setNearbyDoctors(response.data.doctors || []);
+      setShowNearbyProviders(true);
+    } catch (err: any) {
+      setHealthcareError('Failed to fetch nearby healthcare providers');
+      console.error('Error fetching nearby healthcare:', err);
+    } finally {
+      setLoadingHealthcare(false);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (symptoms.length === 0) {
       setError('Please add at least one symptom');
@@ -56,10 +144,14 @@ const SymptomChecker: React.FC = () => {
     setLoading(true);
     setError('');
     setResult(null);
+    setShowNearbyProviders(false);
 
     try {
       const response = await aiAPI.analyzeSymptoms(symptoms, additionalInfo);
       setResult(response.data.analysis);
+      
+      // After successful analysis, fetch nearby healthcare providers
+      await fetchNearbyHealthcare();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to analyze symptoms');
     } finally {

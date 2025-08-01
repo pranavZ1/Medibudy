@@ -1,5 +1,7 @@
 const express = require('express');
 const axios = require('axios');
+const Hospital = require('../models/Hospital');
+const Doctor = require('../models/Doctor');
 const router = express.Router();
 
 // Get user's current location using IP
@@ -241,5 +243,256 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) {
   return deg * (Math.PI/180);
 }
+
+// Simple in-memory cache for geocoding results
+const geocodeCache = new Map();
+
+// Get nearby hospitals based on user location
+router.get('/nearby-hospitals', async (req, res) => {
+  try {
+    const { lat, lng, radius = 50, specialty, limit = 10 } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'Latitude and longitude are required' });
+    }
+
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+    const searchRadius = parseFloat(radius);
+
+    let query = {};
+
+    // Add specialty filter if provided
+    if (specialty) {
+      query['specialty'] = new RegExp(specialty, 'i');
+    }
+
+    // Find hospitals
+    const hospitals = await Hospital.find(query).lean();
+    
+    const hospitalsWithDistance = [];
+    
+    for (const hospital of hospitals) {
+      let distance = 0;
+      
+      // If hospital has coordinates, use them
+      if (hospital.location && hospital.location.coordinates) {
+        distance = calculateDistance(
+          userLat,
+          userLng,
+          hospital.location.coordinates.lat || hospital.location.coordinates[1],
+          hospital.location.coordinates.lng || hospital.location.coordinates[0]
+        );
+      } 
+      // Otherwise, try to geocode the address with caching
+      else if (hospital.location && (hospital.location.address || hospital.location.city)) {
+        const address = hospital.location.address || 
+                       `${hospital.location.city}, ${hospital.location.state}, ${hospital.location.country}`;
+        
+        // Check cache first
+        let coords = geocodeCache.get(address);
+        
+        if (!coords) {
+          try {
+            const geocodeResponse = await axios.get('https://nominatim.openstreetmap.org/search', {
+              params: {
+                q: address,
+                format: 'json',
+                limit: 1,
+                addressdetails: 1
+              },
+              headers: {
+                'User-Agent': 'MediBudy-App'
+              }
+            });
+
+            if (geocodeResponse.data && geocodeResponse.data.length > 0) {
+              coords = {
+                lat: parseFloat(geocodeResponse.data[0].lat),
+                lon: parseFloat(geocodeResponse.data[0].lon)
+              };
+              // Cache the result
+              geocodeCache.set(address, coords);
+            }
+          } catch (geocodeError) {
+            console.error('Geocoding error for hospital:', hospital.name, geocodeError.message);
+            // Skip this hospital if we can't geocode it
+            continue;
+          }
+        }
+        
+        if (coords) {
+          distance = calculateDistance(userLat, userLng, coords.lat, coords.lon);
+        }
+      }
+      
+      // Only include hospitals within the search radius
+      if (distance <= searchRadius) {
+        hospitalsWithDistance.push({
+          ...hospital,
+          distance: Math.round(distance * 100) / 100
+        });
+      }
+    }
+    
+    // Sort by distance and limit results
+    hospitalsWithDistance.sort((a, b) => a.distance - b.distance);
+    const limitedHospitals = hospitalsWithDistance.slice(0, parseInt(limit));
+
+    res.json({
+      hospitals: limitedHospitals,
+      userLocation: { lat: userLat, lng: userLng },
+      searchRadius,
+      count: limitedHospitals.length
+    });
+  } catch (error) {
+    console.error('Error fetching nearby hospitals:', error);
+    res.status(500).json({ error: 'Failed to fetch nearby hospitals' });
+  }
+});
+
+// Get nearby doctors based on user location
+router.get('/nearby-doctors', async (req, res) => {
+  try {
+    const { lat, lng, radius = 50, specialization, limit = 20 } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'Latitude and longitude are required' });
+    }
+
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+    const searchRadius = parseFloat(radius);
+
+    let query = {};
+
+    // Add specialty filter for hospitals if provided
+    if (specialization) {
+      query['doctors.specialization'] = new RegExp(specialization, 'i');
+    }
+
+    // Find hospitals first and extract doctors from them
+    const hospitals = await Hospital.find(query).lean();
+    
+    const doctorsWithDistance = [];
+    
+    for (const hospital of hospitals) {
+      let hospitalDistance = 0;
+      
+      // Calculate hospital distance with caching
+      if (hospital.location && (hospital.location.address || hospital.location.city)) {
+        const address = hospital.location.address || 
+                       `${hospital.location.city}, ${hospital.location.state}, ${hospital.location.country}`;
+        
+        // Check cache first
+        let coords = geocodeCache.get(address);
+        
+        if (!coords) {
+          try {
+            const geocodeResponse = await axios.get('https://nominatim.openstreetmap.org/search', {
+              params: {
+                q: address,
+                format: 'json',
+                limit: 1,
+                addressdetails: 1
+              },
+              headers: {
+                'User-Agent': 'MediBudy-App'
+              }
+            });
+
+            if (geocodeResponse.data && geocodeResponse.data.length > 0) {
+              coords = {
+                lat: parseFloat(geocodeResponse.data[0].lat),
+                lon: parseFloat(geocodeResponse.data[0].lon)
+              };
+              // Cache the result
+              geocodeCache.set(address, coords);
+            }
+          } catch (geocodeError) {
+            console.error('Geocoding error for hospital:', hospital.name, geocodeError.message);
+            continue;
+          }
+        }
+        
+        if (coords) {
+          hospitalDistance = calculateDistance(userLat, userLng, coords.lat, coords.lon);
+        }
+      }
+      
+      // Only process hospitals within the search radius
+      if (hospitalDistance <= searchRadius) {
+        // Extract doctors from this hospital
+        if (hospital.doctors && hospital.doctors.length > 0) {
+          for (const doctor of hospital.doctors) {
+            // Filter by specialization if provided
+            if (!specialization || 
+                (doctor.specialization && doctor.specialization.toLowerCase().includes(specialization.toLowerCase()))) {
+              
+              doctorsWithDistance.push({
+                ...doctor,
+                hospital_info: {
+                  hospital_id: hospital._id,
+                  hospital_name: hospital.name,
+                  hospital_location: hospital.location,
+                  hospital_rating: hospital.rating
+                },
+                distance: Math.round(hospitalDistance * 100) / 100
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    // Sort by distance and limit results
+    doctorsWithDistance.sort((a, b) => a.distance - b.distance);
+    const limitedDoctors = doctorsWithDistance.slice(0, parseInt(limit));
+
+    res.json({
+      doctors: limitedDoctors,
+      userLocation: { lat: userLat, lng: userLng },
+      searchRadius,
+      count: limitedDoctors.length
+    });
+  } catch (error) {
+    console.error('Error fetching nearby doctors:', error);
+    res.status(500).json({ error: 'Failed to fetch nearby doctors' });
+  }
+});
+
+// Get combined nearby hospitals and doctors for symptom analysis
+router.get('/nearby-healthcare', async (req, res) => {
+  try {
+    const { lat, lng, radius = 50, specialty, specialization, hospitalLimit = 5, doctorLimit = 10 } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'Latitude and longitude are required' });
+    }
+
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+
+    // Get nearby hospitals
+    const hospitalResponse = await axios.get(`${req.protocol}://${req.get('host')}/api/location/nearby-hospitals`, {
+      params: { lat, lng, radius, specialty, limit: hospitalLimit }
+    });
+
+    // Get nearby doctors
+    const doctorResponse = await axios.get(`${req.protocol}://${req.get('host')}/api/location/nearby-doctors`, {
+      params: { lat, lng, radius, specialization, limit: doctorLimit }
+    });
+
+    res.json({
+      hospitals: hospitalResponse.data.hospitals || [],
+      doctors: doctorResponse.data.doctors || [],
+      userLocation: { lat: userLat, lng: userLng },
+      searchRadius: parseFloat(radius)
+    });
+  } catch (error) {
+    console.error('Error fetching nearby healthcare:', error);
+    res.status(500).json({ error: 'Failed to fetch nearby healthcare providers' });
+  }
+});
 
 module.exports = router;

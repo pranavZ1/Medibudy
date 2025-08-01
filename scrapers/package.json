@@ -1,0 +1,32 @@
+{
+  "name": "vaidam-comprehensive-scraper",
+  "version": "2.0.0",
+  "description": "Enhanced scraper for Vaidam website to extract hospitals, doctors, and treatments data",
+  "main": "vaidamScraper_enhanced.js",
+  "scripts": {
+    "start": "node vaidamScraper_enhanced.js",
+    "test": "node --version && npm --version",
+    "install-deps": "npm install",
+    "clean": "rm -rf node_modules package-lock.json"
+  },
+  "keywords": [
+    "scraper",
+    "vaidam",
+    "medical",
+    "hospitals",
+    "doctors",
+    "treatments",
+    "healthcare"
+  ],
+  "dependencies": {
+    "puppeteer": "^21.5.2",
+    "cheerio": "^1.0.0-rc.12",
+    "mongoose": "^8.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "MediBudy Team",
+  "license": "MIT"
+}

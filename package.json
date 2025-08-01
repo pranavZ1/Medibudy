@@ -24,7 +24,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.4",
     "puppeteer": "^24.15.0",
-    "rate-limiter-flexible": "^7.1.1"
+    "rate-limiter-flexible": "^7.1.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

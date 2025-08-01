@@ -109,6 +109,31 @@ export const hospitalsAPI = {
 
 // Location API
 export const locationAPI = {
+  getCurrentLocation: () => api.get('/location/current'),
+  
+  geocode: (address: string) => api.post('/location/geocode', { address }),
+  
+  reverseGeocode: (lat: number, lng: number) => 
+    api.post('/location/reverse-geocode', { lat, lng }),
+  
+  searchPlaces: (query: string, limit?: number) => 
+    api.get('/location/search', { params: { query, limit } }),
+  
+  getNearbyHospitals: (lat: number, lng: number, radius?: number, specialty?: string, limit?: number) =>
+    api.get('/location/nearby-hospitals', { 
+      params: { lat, lng, radius, specialty, limit } 
+    }),
+  
+  getNearbyDoctors: (lat: number, lng: number, radius?: number, specialization?: string, limit?: number) =>
+    api.get('/location/nearby-doctors', { 
+      params: { lat, lng, radius, specialization, limit } 
+    }),
+  
+  getNearbyHealthcare: (lat: number, lng: number, radius?: number, specialty?: string, specialization?: string, hospitalLimit?: number, doctorLimit?: number) =>
+    api.get('/location/nearby-healthcare', { 
+      params: { lat, lng, radius, specialty, specialization, hospitalLimit, doctorLimit } 
+    }),
+  
   getUserLocation: () => api.get('/location/user'),
   
   updateUserLocation: (location: {
